@@ -9,7 +9,7 @@ Installation instructions:
 
     Install Python 3 (tested against 3.5 on windows)
     Install modules
-        pip install apscheduler mutagen pyyaml
+        pip install apscheduler mutagen pyyaml slack_sdk
 
 You'll need to go into creek for your station and download the private key.
 
