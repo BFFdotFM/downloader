@@ -1,0 +1,16 @@
+# Configuration parameters for python-sync app for Creek.fm stations
+destination_folder: "C:/Audio/Shows"
+station_url: "http://bff.fm/"
+key: "CREEK API KEY XXXXXXXXXXXXXXXXXXXX"
+
+# logging information
+log_level: "DEBUG"
+log_path: "."
+log_name: "pysync"
+
+#slack secrets
+alerts_url: "SLACK ALERTS WEBHOOK https://hooks.slack.com/services/XXXXXXXXX/XXXXXXXXXXX/XXXXXXXXXXXXXXXXXXXXXXXX"
+monitor_url: "SLACK MONITOR WEBHOOK https://hooks.slack.com/services/XXXXXXXXX/XXXXXXXXXXX/XXXXXXXXXXXXXXXXXXXXXXXX"
+
+# download parameters
+retry_count: 3
