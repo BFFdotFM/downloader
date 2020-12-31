@@ -160,12 +160,16 @@ def download_files(force_download=False):
             logger.debug("Found a host")
             host_list.append(host['display_name'])
 
-        if len(host_list) > 1:
+        if len(host_list) == 0:
+            logger.debug("No host data in API response, use show name as artist tag placeholder")
+            artist = album
+        elif len(host_list) > 1:
             logger.debug("making a list of hosts for Artist field")
             artist = ','.join(host_list)
         else:
             logger.debug("Only one host")
             artist = host_list[0]
+
         logger.debug("Hosts (artist): " + artist)
 
         # construct filename
