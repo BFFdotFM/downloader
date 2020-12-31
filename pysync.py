@@ -36,12 +36,25 @@ __author__ = 'forrest'
 # TODO: daemonize
 # TODO: Auto Rerun (second to last show in podcast RSS)
 
+def build_slack_message(text, icon=None, detail=None):
+    message = ''
+
+    if (icon is not None):
+        message = message + icon + " "
+
+    message = message + text
+
+    if (detail is not None and detail):
+        message = message + "\n\n" + "> " + str(detail)
+
+    return message
+
 # slack integration - Use this for #alerts (failures only)
 def notify_slack_alerts(message):
     alerts_url = config["alerts_url"]
     webhook = WebhookClient(alerts_url)
+    logger.debug('SLACK ALERT: ' + message)
     response = webhook.send(text=message)
-    message = "ERROR: " + message
     notify_slack_monitor(message)
     return
 
@@ -49,6 +62,7 @@ def notify_slack_alerts(message):
 def notify_slack_monitor(message):
     monitor_url = config["monitor_url"]
     webhook = WebhookClient(monitor_url)
+    logger.debug('SLACK MON: ' + message)
     response = webhook.send(text=message)
     return
 
@@ -56,7 +70,8 @@ def notify_slack_monitor(message):
 def download_files(force_download=False):
     logger.name = 'bff.download_files'
     logger.info("Starting process")
-    notify_slack_monitor("Starting download process")
+
+    notify_slack_monitor(build_slack_message("Automation checking for next recorded show...", ":clock230:"))
 
     # Config params
     destination_folder = config["destination_folder"]
@@ -67,30 +82,52 @@ def download_files(force_download=False):
     upcoming_url = "api/broadcasts/upcoming?key="
     full_upcoming_url = station_url + upcoming_url + key
     logger.debug("Upcoming broadcast URL: " + full_upcoming_url)
-    response = urllib.request.urlopen(full_upcoming_url)
-    str_response = response.read().decode('utf-8')
-    logger.debug("string response: " + str_response)
-    broadcasts = json.loads(str_response)
-    logger.debug("json response: ")
-    logger.debug(broadcasts)
 
-    start_time = broadcasts[0]['start']
-    logger.debug("Next Broadcast at " + start_time)
+    # Get next broadcast from Creek:
+    try:
+        response = urllib.request.urlopen(full_upcoming_url)
+    except Exception as e:
+        logger.debug("Error: Failed to read from Creek upcoming broadcasts API.")
+        notify_slack_alerts(build_slack_message("Automation could not connect to Creek upcoming broadcast API `{}`".format(upcoming_url), ":bangbang:", e))
+        return
+
+    # Attempt to parse as JSON - do this in separate steps for clearer debugging
+    try:
+        str_response = response.read().decode('utf-8')
+        broadcasts = json.loads(str_response)
+    except Exception as e:
+        logger.debug("Error: Creek upcoming broadcasts API response could not be parsed.")
+        notify_slack_alerts(":bangbang: Automation failed to parse Creek upcoming broadcast response `{}{}`\n\n> `{}`".format(station_url, upcoming_url, e))
+        return
+
+    #logger.debug("string response: " + str_response)
+    #logger.debug("json response: ")
+    #logger.debug(broadcasts)
+
+    if not broadcasts:
+        logger.debug("No upcoming broadcast returned by Creek")
+        notify_slack_monitor(build_slack_message("There is no upcoming broadcast published in Creek", ":shrug:"))
+        return
+    else:
+        show_title = broadcasts[0]['Show']['title']
+        start_time = broadcasts[0]['start']
+        logger.debug("Upcoming broadcast {} at {}".format(show_title, start_time))
 
     # time calculation
     showtime = datetime.datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
     now_plus_10 = datetime.datetime.now() + datetime.timedelta(minutes=10)
+
     # initialize possibly empty value
     remote_path = ""
     # if the show will start in the next 10 minutes
     if (showtime <= now_plus_10) or (force_download):
-        logger.debug("Found a show that will start in 10 minutes")
+        logger.debug("Show {} starts within 10 minutes; looking for attached recording".format(show_title))
 
         show_id = broadcasts[0]['show_id']
-        logger.debug("show id: " + show_id)
+        logger.debug("Show id: " + show_id)
 
         title = broadcasts[0]['title']
-        logger.debug("Title: " + title)
+        logger.debug("Broadcast title: " + title)
 
         show_media = broadcasts[0]['media']
         for media in show_media:
@@ -101,16 +138,12 @@ def download_files(force_download=False):
                 remote_path = media['url']
                 logger.debug("Remote Path: " + remote_path)
 
-        # get show metadata
-        logger.debug("getting show information")
-        show_url = "api/show/"
-        full_show_url = station_url + show_url + show_id
-        logger.debug("Show URL: " + full_show_url)
-        response = urllib.request.urlopen(full_show_url)
-        str_response = response.read().decode('utf-8')
-        logger.debug("string response: " + str_response)
-        show_info = json.loads(str_response)
-        logger.debug("json response: ")
+        if not remote_path:
+            notify_slack_monitor(build_slack_message("_{}_ at {} does not have an MP3 attached. Expecting live broadcast.".format(show_title, start_time), ":mute:"))
+            return
+
+        # Get show info for MP3 tags:
+        show_info = broadcasts[0]['Show']
         logger.debug(show_info)
 
         album = show_info['title']
@@ -118,8 +151,6 @@ def download_files(force_download=False):
 
         short_name = show_info['short_name']
         logger.debug("Short Name (local folder): " + short_name)
-
-        notify_slack_monitor("Found a show that will begin in ten minutes: " + short_name)
 
         # iterate through hosts
         logger.debug("trying to get hosts")
@@ -129,51 +160,68 @@ def download_files(force_download=False):
             logger.debug("Found a host")
             host_list.append(host['display_name'])
 
-        if len(host_list) > 1:
+        if len(host_list) == 0:
+            logger.debug("No host data in API response, use show name as artist tag placeholder")
+            artist = album
+        elif len(host_list) > 1:
             logger.debug("making a list of hosts for Artist field")
             artist = ','.join(host_list)
         else:
             logger.debug("Only one host")
             artist = host_list[0]
+
         logger.debug("Hosts (artist): " + artist)
 
         # construct filename
         local_filename = os.path.join(destination_folder, short_name, short_name + "-newest.mp3")
         logger.debug('Local Filename: ' + local_filename)
-        notify_slack_monitor("Found a file: " + remote_path + " to be downloaded to " + local_filename)
+
+        notify_slack_monitor(build_slack_message(
+            "Downloading next {} broadcast: _{}_ at {}".format(show_title, title, start_time),
+            ":arrow_down:",
+            "Downloading `{}` to `{}`".format(remote_path, local_filename)
+        ))
 
         # create directories, if needed
         local_directory = os.path.dirname(local_filename)
         if not os.path.exists(local_directory):
             logger.warning('Had to make directory ' + local_directory)
-            notify_slack_alerts("New show warning, this directory did not exist: " + local_directory)
+            notify_slack_alerts(build_slack_message("New show warning, no local directory existed.", ":warning:", "Created `{}`. You should verify that this was expected.".format(local_directory)))
             os.makedirs(local_directory)
 
-        if remote_path:
-            # download file
-            logger.info("Downloading " + remote_path + " to " + local_filename)
-            retry_count = config["retry_count"]
-            for i in range(retry_count):
-                try:
-                    with urllib.request.urlopen(remote_path) as response, open(local_filename, 'wb') as out_file:
-                        shutil.copyfileobj(response, out_file)
-                except:
-                    if i < tries - 1: # i is zero indexed
-                        notify_slack_alerts("Download failed, attempt #" + i)
-                        continue
-                    else:
-                        notify_slack_alerts("Download failed too many times, someone will have to manually download " + remote_path + " to " + local_filename)
-                        raise
-                break
-            
-            logger.info("download complete.")
-            notify_slack_monitor("Downloaded file " + local_filename)
-        else:
-            logger.warn("No file was attached to the broadcast!")
-            notify_slack_alerts("No valid MP3 file was attached to the broadcast for : " + local_directory)
+        # download file
+        logger.info("Downloading " + remote_path + " to " + local_filename)
+        retry_count = config["retry_count"]
+        for i in range(retry_count):
+            try:
+                with urllib.request.urlopen(remote_path) as response, open(local_filename, 'wb') as out_file:
+                    shutil.copyfileobj(response, out_file)
+            except Exception as e:
+                if i < retry_count - 1: # i is zero indexed
+                    logger.debug("Download attempt {} failed. {}".format(i + 1, e))
+                    notify_slack_monitor(build_slack_message(
+                        "Download attempt failed, {}/{}".format(i, retry_count),
+                        ":warning:",
+                        e))
+                    continue
+                else:
+                    logger.debug("Download completely failed. {}".format(i, e))
+                    notify_slack_alerts(build_slack_message(
+                        "Downloading `{}` failed: `{}`. ".format(remote_path, e),
+                        ":bangbang:",
+                        "Recording of {} must be manually cued to `{}` before *{}*".format(show_title, local_filename, start_time)
+                    ))
+                    return
+            break
 
-        # add mp3 tags
         if os.path.exists(local_filename):
+            logger.info("download complete.")
+            notify_slack_monitor(build_slack_message(
+                "Download successful. _{}_ cued for {}".format(show_title, start_time),
+                ":white_check_mark:",
+                "Automation will broadcast `{}`".format(local_filename)
+            ))
+
             # set mp3 tags
             logger.debug("Adding mp3 tag")
             try:
@@ -184,7 +232,7 @@ def download_files(force_download=False):
 
             logger.debug("Removing tags")
             tags.delete(local_filename)
-            
+
             logger.debug("Constructing tag")
             # title
             tags["TIT2"] = TIT2(encoding=3, text=title)
@@ -198,6 +246,13 @@ def download_files(force_download=False):
             tags.save(filename=local_filename,
                       v1=ID3v1SaveOptions.CREATE,
                       v2_version=4)
+        else:
+            logger.info("download completed, but local file not available: {}".format(local_filename))
+            notify_slack_alerts(build_slack_message(
+                "Local file `{}` is not available after download.".format(local_filename),
+                ":bangbang:",
+                "{} recording `{}` must be manually cued to `{}` before *{}*".format(show_title, remote_path, local_filename, start_time)
+            ))
 
     else:
         # show time is not 10 minutes or less from now
@@ -266,4 +321,3 @@ if __name__ == '__main__':
         scheduler.shutdown()  # Not strictly necessary if daemonic mode is enabled but should be done if possible
 
     logger.info("Program Stop")
-    
