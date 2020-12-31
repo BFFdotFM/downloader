@@ -184,28 +184,30 @@ def download_files(force_download=False):
             notify_slack_alerts("New show warning, this directory did not exist: " + local_directory)
             os.makedirs(local_directory)
 
-        if remote_path:
-            # download file
-            logger.info("Downloading " + remote_path + " to " + local_filename)
-            retry_count = config["retry_count"]
-            for i in range(retry_count):
-                try:
-                    with urllib.request.urlopen(remote_path) as response, open(local_filename, 'wb') as out_file:
-                        shutil.copyfileobj(response, out_file)
-                except:
-                    if i < tries - 1: # i is zero indexed
-                        notify_slack_alerts("Download failed, attempt #" + i)
-                        continue
-                    else:
-                        notify_slack_alerts("Download failed too many times, someone will have to manually download " + remote_path + " to " + local_filename)
-                        raise
-                break
-            
-            logger.info("download complete.")
-            notify_slack_monitor("Downloaded file " + local_filename)
-        else:
-            logger.warn("No file was attached to the broadcast!")
-            notify_slack_alerts("No valid MP3 file was attached to the broadcast for : " + local_directory)
+        # download file
+        logger.info("Downloading " + remote_path + " to " + local_filename)
+        retry_count = config["retry_count"]
+        for i in range(retry_count):
+            try:
+                with urllib.request.urlopen(remote_path) as response, open(local_filename, 'wb') as out_file:
+                    shutil.copyfileobj(response, out_file)
+            except Exception as e:
+                if i < retry_count - 1: # i is zero indexed
+                    logger.debug("Download attempt {} failed. {}".format(i + 1, e))
+                    notify_slack_monitor(build_slack_message(
+                        "Download attempt failed, {}/{}".format(i, retry_count),
+                        ":warning:",
+                        e))
+                    continue
+                else:
+                    logger.debug("Download completely failed. {}".format(i, e))
+                    notify_slack_alerts(build_slack_message(
+                        "Downloading `{}` failed: `{}`. ".format(remote_path, e),
+                        ":bangbang:",
+                        "Recording of {} must be manually cued to `{}` before *{}*".format(show_title, local_filename, start_time)
+                    ))
+                    return
+            break
 
         # add mp3 tags
         if os.path.exists(local_filename):
