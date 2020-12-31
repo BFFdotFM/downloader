@@ -45,7 +45,7 @@ def build_slack_message(text, icon=None, detail=None):
     message = message + text
 
     if (detail is not None and detail):
-        message = message + "\n\n" + "> " + str(detail)
+        message = message + "\n" + "> " + str(detail)
 
     return message
 
