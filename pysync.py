@@ -81,15 +81,36 @@ def download_files(force_download=False):
     upcoming_url = "api/broadcasts/upcoming?key="
     full_upcoming_url = station_url + upcoming_url + key
     logger.debug("Upcoming broadcast URL: " + full_upcoming_url)
-    response = urllib.request.urlopen(full_upcoming_url)
-    str_response = response.read().decode('utf-8')
-    logger.debug("string response: " + str_response)
-    broadcasts = json.loads(str_response)
-    logger.debug("json response: ")
-    logger.debug(broadcasts)
 
-    start_time = broadcasts[0]['start']
-    logger.debug("Next Broadcast at " + start_time)
+    # Get next broadcast from Creek:
+    try:
+        response = urllib.request.urlopen(full_upcoming_url)
+    except Exception as e:
+        logger.debug("Error: Failed to read from Creek upcoming broadcasts API.")
+        notify_slack_alerts(build_slack_message("Automation could not connect to Creek upcoming broadcast API `{}`".format(upcoming_url), ":bangbang:", e))
+        return
+
+    # Attempt to parse as JSON - do this in separate steps for clearer debugging
+    try:
+        str_response = response.read().decode('utf-8')
+        broadcasts = json.loads(str_response)
+    except Exception as e:
+        logger.debug("Error: Creek upcoming broadcasts API response could not be parsed.")
+        notify_slack_alerts(":bangbang: Automation failed to parse Creek upcoming broadcast response `{}{}`\n\n> `{}`".format(station_url, upcoming_url, e))
+        return
+
+    #logger.debug("string response: " + str_response)
+    #logger.debug("json response: ")
+    #logger.debug(broadcasts)
+
+    if not broadcasts:
+        logger.debug("No upcoming broadcast returned by Creek")
+        notify_slack_monitor(build_slack_message("There is no upcoming broadcast published in Creek", ":shrug:"))
+        return
+    else:
+        show_title = broadcasts[0]['Show']['title']
+        start_time = broadcasts[0]['start']
+        logger.debug("Upcoming broadcast {} at {}".format(show_title, start_time))
 
     # time calculation
     showtime = datetime.datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
