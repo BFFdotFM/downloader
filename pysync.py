@@ -36,12 +36,25 @@ __author__ = 'forrest'
 # TODO: daemonize
 # TODO: Auto Rerun (second to last show in podcast RSS)
 
+def build_slack_message(text, icon=None, detail=None):
+    message = ''
+
+    if (icon is not None):
+        message = message + icon + " "
+
+    message = message + text
+
+    if (detail is not None and detail):
+        message = message + "\n\n" + "> " + str(detail)
+
+    return message
+
 # slack integration - Use this for #alerts (failures only)
 def notify_slack_alerts(message):
     alerts_url = config["alerts_url"]
     webhook = WebhookClient(alerts_url)
+    logger.debug('SLACK ALERT: ' + message)
     response = webhook.send(text=message)
-    message = "ERROR: " + message
     notify_slack_monitor(message)
     return
 
@@ -49,6 +62,7 @@ def notify_slack_alerts(message):
 def notify_slack_monitor(message):
     monitor_url = config["monitor_url"]
     webhook = WebhookClient(monitor_url)
+    logger.debug('SLACK MON: ' + message)
     response = webhook.send(text=message)
     return
 
