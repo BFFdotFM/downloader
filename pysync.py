@@ -136,16 +136,12 @@ def download_files(force_download=False):
                 remote_path = media['url']
                 logger.debug("Remote Path: " + remote_path)
 
-        # get show metadata
-        logger.debug("getting show information")
-        show_url = "api/show/"
-        full_show_url = station_url + show_url + show_id
-        logger.debug("Show URL: " + full_show_url)
-        response = urllib.request.urlopen(full_show_url)
-        str_response = response.read().decode('utf-8')
-        logger.debug("string response: " + str_response)
-        show_info = json.loads(str_response)
-        logger.debug("json response: ")
+        if not remote_path:
+            notify_slack_monitor(build_slack_message("_{}_ at {} does not have an MP3 attached. Expecting live broadcast.".format(show_title, start_time), ":mute:"))
+            return
+
+        # Get show info for MP3 tags:
+        show_info = broadcasts[0]['Show']
         logger.debug(show_info)
 
         album = show_info['title']
