@@ -70,7 +70,8 @@ def notify_slack_monitor(message):
 def download_files(force_download=False):
     logger.name = 'bff.download_files'
     logger.info("Starting process")
-    notify_slack_monitor("Starting download process")
+
+    notify_slack_monitor(build_slack_message("Automation checking for next recorded show...", ":clock230:"))
 
     # Config params
     destination_folder = config["destination_folder"]
@@ -115,17 +116,18 @@ def download_files(force_download=False):
     # time calculation
     showtime = datetime.datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
     now_plus_10 = datetime.datetime.now() + datetime.timedelta(minutes=10)
+
     # initialize possibly empty value
     remote_path = ""
     # if the show will start in the next 10 minutes
     if (showtime <= now_plus_10) or (force_download):
-        logger.debug("Found a show that will start in 10 minutes")
+        logger.debug("Show {} starts within 10 minutes; looking for attached recording".format(show_title))
 
         show_id = broadcasts[0]['show_id']
-        logger.debug("show id: " + show_id)
+        logger.debug("Show id: " + show_id)
 
         title = broadcasts[0]['title']
-        logger.debug("Title: " + title)
+        logger.debug("Broadcast title: " + title)
 
         show_media = broadcasts[0]['media']
         for media in show_media:
@@ -150,8 +152,6 @@ def download_files(force_download=False):
         short_name = show_info['short_name']
         logger.debug("Short Name (local folder): " + short_name)
 
-        notify_slack_monitor("Found a show that will begin in ten minutes: " + short_name)
-
         # iterate through hosts
         logger.debug("trying to get hosts")
         hosts = show_info['hosts']
@@ -175,13 +175,18 @@ def download_files(force_download=False):
         # construct filename
         local_filename = os.path.join(destination_folder, short_name, short_name + "-newest.mp3")
         logger.debug('Local Filename: ' + local_filename)
-        notify_slack_monitor("Found a file: " + remote_path + " to be downloaded to " + local_filename)
+
+        notify_slack_monitor(build_slack_message(
+            "Downloading next {} broadcast: _{}_ at {}".format(show_title, title, start_time),
+            ":arrow_down:",
+            "Downloading `{}` to `{}`".format(remote_path, local_filename)
+        ))
 
         # create directories, if needed
         local_directory = os.path.dirname(local_filename)
         if not os.path.exists(local_directory):
             logger.warning('Had to make directory ' + local_directory)
-            notify_slack_alerts("New show warning, this directory did not exist: " + local_directory)
+            notify_slack_alerts(build_slack_message("New show warning, no local directory existed.", ":warning:", "Created `{}`. You should verify that this was expected.".format(local_directory)))
             os.makedirs(local_directory)
 
         # download file
@@ -209,8 +214,14 @@ def download_files(force_download=False):
                     return
             break
 
-        # add mp3 tags
         if os.path.exists(local_filename):
+            logger.info("download complete.")
+            notify_slack_monitor(build_slack_message(
+                "Download successful. _{}_ cued for {}".format(show_title, start_time),
+                ":white_check_mark:",
+                "Automation will broadcast `{}`".format(local_filename)
+            ))
+
             # set mp3 tags
             logger.debug("Adding mp3 tag")
             try:
@@ -221,7 +232,7 @@ def download_files(force_download=False):
 
             logger.debug("Removing tags")
             tags.delete(local_filename)
-            
+
             logger.debug("Constructing tag")
             # title
             tags["TIT2"] = TIT2(encoding=3, text=title)
@@ -235,6 +246,13 @@ def download_files(force_download=False):
             tags.save(filename=local_filename,
                       v1=ID3v1SaveOptions.CREATE,
                       v2_version=4)
+        else:
+            logger.info("download completed, but local file not available: {}".format(local_filename))
+            notify_slack_alerts(build_slack_message(
+                "Local file `{}` is not available after download.".format(local_filename),
+                ":bangbang:",
+                "{} recording `{}` must be manually cued to `{}` before *{}*".format(show_title, remote_path, local_filename, start_time)
+            ))
 
     else:
         # show time is not 10 minutes or less from now
@@ -303,4 +321,3 @@ if __name__ == '__main__':
         scheduler.shutdown()  # Not strictly necessary if daemonic mode is enabled but should be done if possible
 
     logger.info("Program Stop")
-    
