@@ -45,7 +45,7 @@ def build_slack_message(text, icon=None, detail=None):
     message = message + text
 
     if (detail is not None and detail):
-        message = message + "\n\n" + "> " + str(detail)
+        message = message + "\n" + "> " + str(detail)
 
     return message
 
@@ -71,7 +71,7 @@ def download_files(force_download=False):
     logger.name = 'bff.download_files'
     logger.info("Starting process")
 
-    notify_slack_monitor(build_slack_message("Automation checking for next recorded show...", ":clock230:"))
+    notify_slack_monitor(build_slack_message("Automation checking for next recorded show...", ":eyes:"))
 
     # Config params
     destination_folder = config["destination_folder"]
@@ -256,15 +256,24 @@ def download_files(force_download=False):
 
     else:
         # show time is not 10 minutes or less from now
+
+        # Calculate countdown:
+        show_delta = showtime - datetime.datetime.now()
+        s = show_delta.seconds
+        days, hour_rem = divmod(s, 86400)
+        hours, remainder = divmod(hour_rem, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        show_delta_string = "{0} days, {1} hours, {2} minutes, {3} seconds".format(days, hours, minutes, seconds)
+
         if logging.getLogger().isEnabledFor(logging.DEBUG):
-            show_delta = showtime - datetime.datetime.now()
-            s = show_delta.seconds
-            days, hour_rem = divmod(s, 86400)
-            hours, remainder = divmod(hour_rem, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            show_delta_string = "{0} days, {1} hours, {2} minutes, {3} seconds".format(days, hours, minutes, seconds)
             short_name = broadcasts[0]['Show']['short_name']
             logger.debug("Next show (" + short_name + ") in " + show_delta_string + ", not running download step yet")
+
+        notify_slack_monitor(build_slack_message(
+            "Next broadcast is not imminent, no download action now.",
+            ":clock430:",
+            "*{}* in _{}_".format(show_title, show_delta_string)
+        ))
 
     logger.info("Finished process")
     logger.name = __name__
