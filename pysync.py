@@ -13,6 +13,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 # connecting to the website - get next show
 import urllib.request
 
+# verifying the download integrity
+import hashlib
+
 # utilities for writing output files
 import shutil
 
@@ -195,7 +198,28 @@ def download_files(force_download=False):
         for i in range(retry_count):
             try:
                 with urllib.request.urlopen(remote_path) as response, open(local_filename, 'wb') as out_file:
+                    expected_etag = response.headers.get('etag').replace('"', '') # Replace " " around header value if present
+                    expected_bytes = response.headers.get('content-length')
+                    logger.debug("Expected file info: Etag: {}, {} bytes".format(expected_etag, expected_bytes))
+
                     shutil.copyfileobj(response, out_file)
+
+                hasher = hashlib.md5()
+                with open(local_filename, "rb") as f:
+                    for chunk in iter(lambda: f.read(4096), b""):
+                        hasher.update(chunk)
+
+                result_md5 = hasher.hexdigest()
+                logger.debug("MD5 of download: {}".format(result_md5))
+
+                if (result_md5 != expected_etag):
+                    actual_bytes = os.path.getsize(local_filename)
+                    message = "MD5 download hash did not match, {} bytes saved, expected {} bytes".format(actual_bytes, expected_bytes)
+
+                    logger.debug(message)
+                    notify_slack_monitor(build_slack_message(message, ":abacus:"))
+                    raise RuntimeError(message)
+
             except Exception as e:
                 if i < retry_count - 1: # i is zero indexed
                     logger.debug("Download attempt {} failed. {}".format(i + 1, e))
