@@ -16,6 +16,6 @@ You'll need to go into creek for your station and download the private key.
 Log in as a station admin, then:
 Tools > Settings > Integration > Scroll down to bottom > Secret Key
 
-Manually edit the script to include this key.
+Edit the YAML configuration file to reflect this key.
 
 It should be left open in a command window, just double click python-sync.py to begin
