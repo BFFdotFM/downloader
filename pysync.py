@@ -271,7 +271,7 @@ def download_files(force_download=False):
         # Calculate countdown:
         show_delta = showtime - datetime.datetime.now()
         s = show_delta.seconds
-        days, hour_rem = divmod(s, 86400)
+        days = show_delta.days
         hours, remainder = divmod(hour_rem, 3600)
         minutes, seconds = divmod(remainder, 60)
         show_delta_string = "{0} days, {1} hours, {2} minutes, {3} seconds".format(days, hours, minutes, seconds)
