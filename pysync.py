@@ -51,6 +51,8 @@ def build_slack_message(text, icon=None, detail=None):
 
 # slack integration - Use this for #alerts (failures only)
 def notify_slack_alerts(message):
+    if not bool(config["enable_slack"]):
+        return
     alerts_url = config["alerts_url"]
     webhook = WebhookClient(alerts_url)
     logger.debug('SLACK ALERT: ' + message)

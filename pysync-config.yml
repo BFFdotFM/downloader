@@ -9,6 +9,7 @@ log_path: "."
 log_name: "pysync"
 
 #slack secrets
+enable_slack: false
 alerts_url: "SLACK ALERTS WEBHOOK https://hooks.slack.com/services/XXXXXXXXX/XXXXXXXXXXX/XXXXXXXXXXXXXXXXXXXXXXXX"
 monitor_url: "SLACK MONITOR WEBHOOK https://hooks.slack.com/services/XXXXXXXXX/XXXXXXXXXXX/XXXXXXXXXXXXXXXXXXXXXXXX"
 
