@@ -1,7 +1,7 @@
 __author__ = "forrest, benward"
 __copyright__ = "Copyright 2021, BFF.fm"
 __credits__ = ["Forrest Guest", "Ben Ward"]
-__version__ = "1.5"
+__version__ = "1.6"
 __status__ = "Production"
 
 # basic os functions
@@ -183,7 +183,8 @@ def possibly_download_broadcast(broadcast):
 
     # Download file
     logger.info("Downloading " + remote_path + " to " + local_filename)
-    retry_count = config["retry_count"]
+    # todo/possible bug: forcing int conversion, need to handle exceptions
+    retry_count = int(config["retry_count"])
     for i in range(retry_count):
         try:
             with urllib.request.urlopen(remote_path) as response, open(local_filename, 'wb') as out_file:
