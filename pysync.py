@@ -252,27 +252,8 @@ def possibly_download_broadcast(broadcast):
             "Automation will broadcast `{}`".format(local_filename)
         ))
 
-        # set mp3 tags
-        LOGGER.debug("Adding mp3 tag")
-        try:
-            tags = ID3(local_filename)
-        except ID3NoHeaderError:
-            LOGGER.debug("Adding ID3 header")
-            tags = ID3()
+        set_mp3_tag(local_filename, artist, album, title)
 
-        LOGGER.debug("Removing tags")
-        tags.delete(local_filename)
-
-        LOGGER.debug("Constructing tag")
-        tags["TIT2"] = TIT2(encoding=3, text=title) # title
-        tags["TALB"] = TALB(encoding=3, text=album) # album
-        tags["TPE1"] = TPE1(encoding=3, text=artist) # artist
-
-        LOGGER.debug("Saving tags")
-        # v1=2 switch forces ID3 v1 tag to be written
-        tags.save(filename=local_filename,
-                  v1=ID3v1SaveOptions.CREATE,
-                  v2_version=4)
     else:
         LOGGER.info("download completed, but local file not available: {}".format(local_filename))
         notify_slack_alerts(build_slack_message(
@@ -281,6 +262,31 @@ def possibly_download_broadcast(broadcast):
             "{} recording `{}` must be manually cued to `{}` before *{}*".format(show_title, remote_path, local_filename, start_time)
         ))
     return
+
+def set_mp3_tag(local_filename, artist, album, title):
+    # set mp3 tags
+    LOGGER.debug("Adding mp3 tag")
+    try:
+        tags = ID3(local_filename)
+    except ID3NoHeaderError:
+        LOGGER.debug("Adding ID3 header")
+        tags = ID3()
+
+    LOGGER.debug("Removing tags")
+    tags.delete(local_filename)
+
+    LOGGER.debug("Constructing tag")
+    tags["TIT2"] = TIT2(encoding=3, text=title) # title
+    tags["TALB"] = TALB(encoding=3, text=album) # album
+    tags["TPE1"] = TPE1(encoding=3, text=artist) # artist
+
+    LOGGER.debug("Saving tags")
+    # v1=2 switch forces ID3 v1 tag to be written
+    tags.save(
+        filename=local_filename,
+        v1=ID3v1SaveOptions.CREATE,
+        v2_version=4
+    )
 
 # main function
 def fetch_upcoming():
