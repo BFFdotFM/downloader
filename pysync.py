@@ -77,6 +77,20 @@ def notify_slack_monitor(message):
     return
 
 def possibly_download_broadcast(broadcast):
+    """ Given a dictionary of data representing a broadcast, possibly download the mp3 associated with it.
+
+    See "retrieve_upcoming_broadcast_metadata" function below for example structure of these broadcast dicts
+
+    Reasons we wouldn't download:
+
+    - There is no media metadata associated with it
+    - The file already exists and it's the same file we expect
+    - There is otherwise some failure in the downloading mechanism
+
+    Once we download the broadcast, we:
+
+    - Overwrite the existing mp3 tag based on the show information in the broadcast
+    """
 
     # Config params
     destination_folder = config["destination_folder"]
@@ -275,9 +289,98 @@ def fetch_upcoming():
 
     notify_slack_monitor(build_slack_message("Automation checking for new recorded shows...", ":eyes:"))
 
-    # Config params
     station_url = config["station_url"]
     key = config["key"]
+
+    broadcast_metadata = retrieve_upcoming_broadcast_metadata(station_url, key)
+
+    if broadcast_metadata:
+        LOGGER.debug("{} upcoming broadcasts returned by Creek API".format(len(broadcast_metadata)))
+        # Process every upcoming broadcast and cue the download file if new:
+        for broadcast in broadcast_metadata:
+            possibly_download_broadcast(broadcast)
+    else:
+        LOGGER.debug("No upcoming broadcast returned by Creek")
+        notify_slack_monitor(build_slack_message("There is no upcoming broadcast published in Creek", ":shrug:"))
+
+    LOGGER.info("Finished process")
+    LOGGER.name = __name__
+
+def retrieve_upcoming_broadcast_metadata(station_url, key):
+    """ Retrieves a json response from creek that we parse into a list of dictionaries.
+
+    Example format of this is like below -- note some have attached media, and some don't.
+
+    [
+        {
+            "id": "48469",
+            "title": "Heartbeats 8/4",
+            "start": "2025-08-04 16:00:00",
+            "text": "",
+            "show_id": "612",
+            "url": "http://bff.fm/broadcasts/48469",
+            "Show": {
+                "id": "612",
+                "title": "Heartbeats FM",
+                "short_name": "heartbeats-fm",
+                "short_description": "HEARTBEATS is a series of live shows in the Bay Area that spotlights artists and focuses on immersive and rousing electronic dance music. \r\nReach out if you'd like to spin at one of our events. If not then enjoy the tunes.\r\n",
+                "full_description": "(Future Funk, City Pop, Nu-Disco, Bay House, Retro Internationale.) HEARTBEATS is a series of live shows in the Bay Area that spotlights artists and focuses on immersive and rousing dance music. This channel will serve as a bulletin board for those events as well as a mood board for your Monday groove. I want to expose YOU, the listener, to a new kind of slapper.\u003C/p\u003E\u003Cp\u003EReach out if you'd like to spin at one of our events.&nbsp;If not then enjoy the tunes.\u003C/p\u003EMusic is love.&nbsp;\u003Cp\u003EI make music.\u003Cbr\u003ECall me Luvmaker.\u003C/p\u003E",
+                "url": "http://bff.fm/shows/heartbeats-fm",
+                "Image": null,
+                "image": false,
+                "airtime_rule": null,
+                "hosts": [],
+                "airtimes": [],
+                "categories": [],
+                "group": null,
+                "meta": []
+            },
+            "media": [
+                {
+                    "id": "146898",
+                    "title": "bff_Aug4.mp3",
+                    "description": "",
+                    "type": "audio",
+                    "subtype": "mp3",
+                    "file": "heartbeats-fm/1754321122YDBQjwjv-bff_Aug4.mp3",
+                    "url": "https://a.bff.fm/audio/heartbeats-fm/1754321122YDBQjwjv-bff_Aug4.mp3",
+                    "meta": []
+                }
+            ],
+            "User": null,
+            "Image": null,
+            "tracks": []
+        },
+        {
+            "id": "48422",
+            "title": "PICKLEPLANET #156 ERIC PT 3",
+            "start": "2025-08-04 18:00:00",
+            "text": "HES BACK BABY THE BIRTHDAY KING BRINGING THE BANGERS",
+            "show_id": "507",
+            "url": "http://bff.fm/broadcasts/48422",
+            "Show": {
+                "id": "507",
+                "title": "PICKLEPLANET",
+                "short_name": "pickleplanet",
+                "short_description": "pickle licious tracks sprinkled with new stuff, local stuff and all the things that make up my chaos brainz ",
+                "full_description": "pickle licious tracks sprinkled with new stuff, local stuff and all the things that make up my chaos brainz.",
+                "url": "http://bff.fm/shows/pickleplanet",
+                "Image": null,
+                "image": false,
+                "airtime_rule": null,
+                "hosts": [],
+                "airtimes": [],
+                "categories": [],
+                "group": null,
+                "meta": []
+            },
+            "media": [],
+            "User": null,
+            "Image": null,
+            "tracks": []
+        }
+    ]
+    """
 
     # download json
     upcoming_url = "api/broadcasts/upcoming?key="
@@ -290,7 +393,7 @@ def fetch_upcoming():
     except Exception as e:
         LOGGER.debug("Error: Failed to read from Creek upcoming broadcasts API.")
         notify_slack_alerts(build_slack_message("Automation could not connect to Creek upcoming broadcast API `{}`".format(upcoming_url), ":bangbang:", e))
-        return
+        return None
 
     # Attempt to parse as JSON - do this in separate steps for clearer debugging
     try:
@@ -299,25 +402,13 @@ def fetch_upcoming():
     except Exception as e:
         LOGGER.debug("Error: Creek upcoming broadcasts API response could not be parsed.")
         notify_slack_alerts(":bangbang: Automation failed to parse Creek upcoming broadcast response `{}{}`\n\n> `{}`".format(station_url, upcoming_url, e))
-        return
+        return None
 
     #LOGGER.debug("string response: " + str_response)
     #LOGGER.debug("json response: ")
     #LOGGER.debug(broadcasts)
 
-    if not broadcasts:
-        LOGGER.debug("No upcoming broadcast returned by Creek")
-        notify_slack_monitor(build_slack_message("There is no upcoming broadcast published in Creek", ":shrug:"))
-        return
-    else:
-        LOGGER.debug("{} upcoming broadcasts returned by Creek API".format(len(broadcasts)))
-
-    # Process every upcoming broadcast and cue the download file if new:
-    for broadcast in broadcasts:
-        possibly_download_broadcast(broadcast)
-
-    LOGGER.info("Finished process")
-    LOGGER.name = __name__
+    return broadcasts
 
 
 def configure_logs(logger, config):
@@ -348,7 +439,9 @@ if __name__ == '__main__':
     # MAIN PROCESS
 
     with open('pysync-config.yml', 'r') as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.SafeLoader)
+        if config is None:
+            raise Exception("No configuration found")
 
     configure_logs(LOGGER, config)
 
