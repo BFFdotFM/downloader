@@ -330,7 +330,7 @@ def retrieve_upcoming_broadcast_metadata(station_url, key):
                 "title": "Heartbeats FM",
                 "short_name": "heartbeats-fm",
                 "short_description": "HEARTBEATS is a series of live shows in the Bay Area that spotlights artists and focuses on immersive and rousing electronic dance music. \r\nReach out if you'd like to spin at one of our events. If not then enjoy the tunes.\r\n",
-                "full_description": "(Future Funk, City Pop, Nu-Disco, Bay House, Retro Internationale.) HEARTBEATS is a series of live shows in the Bay Area that spotlights artists and focuses on immersive and rousing dance music. This channel will serve as a bulletin board for those events as well as a mood board for your Monday groove. I want to expose YOU, the listener, to a new kind of slapper.\u003C/p\u003E\u003Cp\u003EReach out if you'd like to spin at one of our events.&nbsp;If not then enjoy the tunes.\u003C/p\u003EMusic is love.&nbsp;\u003Cp\u003EI make music.\u003Cbr\u003ECall me Luvmaker.\u003C/p\u003E",
+                "full_description": "(Future Funk, City Pop, Nu-Disco, Bay House, Retro Internationale.) HEARTBEATS is a series of live shows in the Bay Area that spotlights artists and focuses on immersive and rousing dance music. This channel will serve as a bulletin board for those events as well as a mood board for your Monday groove. I want to expose YOU, the listener, to a new kind of slapper. Reach out if you'd like to spin at one of our events.&nbsp;If not then enjoy the tunes.",
                 "url": "http://bff.fm/shows/heartbeats-fm",
                 "Image": null,
                 "image": false,
