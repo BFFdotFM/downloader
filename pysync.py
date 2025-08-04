@@ -41,6 +41,9 @@ from slack_sdk.webhook import WebhookClient
 
 LOGGER = logging.getLogger()
 
+# TODO -- move global config object into something that is passed around to make testing easier
+CONFIG = {}
+
 
 def build_slack_message(text, icon=None, detail=None):
     message = ''
@@ -57,9 +60,9 @@ def build_slack_message(text, icon=None, detail=None):
 
 # slack integration - Use this for #alerts (failures only)
 def notify_slack_alerts(message):
-    if not bool(config["enable_slack"]):
+    if not bool(CONFIG["enable_slack"]):
         return
-    alerts_url = config["alerts_url"]
+    alerts_url = CONFIG["alerts_url"]
     webhook = WebhookClient(alerts_url)
     LOGGER.debug('SLACK ALERT: ' + message)
     response = webhook.send(text=message)
@@ -68,9 +71,9 @@ def notify_slack_alerts(message):
 
 # slack integration - Use this for #monitor-automation (both failures and successes)
 def notify_slack_monitor(message):
-    if not bool(config["enable_slack"]):
+    if not bool(CONFIG["enable_slack"]):
         return
-    monitor_url = config["monitor_url"]
+    monitor_url = CONFIG["monitor_url"]
     webhook = WebhookClient(monitor_url)
     LOGGER.debug('SLACK MON: ' + message)
     response = webhook.send(text=message)
@@ -93,7 +96,7 @@ def possibly_download_broadcast(broadcast):
     """
 
     # Config params
-    destination_folder = config["destination_folder"]
+    destination_folder = CONFIG["destination_folder"]
 
     show_title = broadcast['Show']['title']
     start_time = broadcast['start']
@@ -201,7 +204,7 @@ def possibly_download_broadcast(broadcast):
     # Download file
     LOGGER.info("Downloading " + remote_path + " to " + local_filename)
     # todo/possible bug: forcing int conversion, need to handle exceptions
-    retry_count = int(config["retry_count"])
+    retry_count = int(CONFIG["retry_count"])
     for i in range(retry_count):
         try:
             with urllib.request.urlopen(remote_path) as response, open(local_filename, 'wb') as out_file:
@@ -295,8 +298,8 @@ def fetch_upcoming():
 
     notify_slack_monitor(build_slack_message("Automation checking for new recorded shows...", ":eyes:"))
 
-    station_url = config["station_url"]
-    key = config["key"]
+    station_url = CONFIG["station_url"]
+    key = CONFIG["key"]
 
     broadcast_metadata = retrieve_upcoming_broadcast_metadata(station_url, key)
 
@@ -445,11 +448,11 @@ if __name__ == '__main__':
     # MAIN PROCESS
 
     with open('pysync-config.yml', 'r') as f:
-        config = yaml.load(f, Loader=yaml.SafeLoader)
-        if config is None:
+        CONFIG = yaml.load(f, Loader=yaml.SafeLoader)
+        if not CONFIG:
             raise Exception("No configuration found")
 
-    configure_logs(LOGGER, config)
+    configure_logs(LOGGER, CONFIG)
 
     LOGGER.info("Program Start")
 
