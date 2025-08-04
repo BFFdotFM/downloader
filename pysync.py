@@ -255,6 +255,8 @@ def possibly_download_broadcast(broadcast):
             "Automation will broadcast `{}`".format(local_filename)
         ))
 
+        # TODO -- Add logic here to pad file if it's a length that would cause problems
+
         set_mp3_tag(local_filename, artist, album, title)
 
     else:
