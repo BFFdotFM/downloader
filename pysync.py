@@ -39,6 +39,12 @@ from slack_sdk.webhook import WebhookClient
 # TODO: daemonize
 # TODO: Auto Rerun (second to last show in podcast RSS)
 
+LOGGER = logging.getLogger()
+
+# TODO -- move global config object into something that is passed around to make testing easier
+CONFIG = {}
+
+
 def build_slack_message(text, icon=None, detail=None):
     message = ''
 
@@ -54,29 +60,43 @@ def build_slack_message(text, icon=None, detail=None):
 
 # slack integration - Use this for #alerts (failures only)
 def notify_slack_alerts(message):
-    if not bool(config["enable_slack"]):
+    if not bool(CONFIG["enable_slack"]):
         return
-    alerts_url = config["alerts_url"]
+    alerts_url = CONFIG["alerts_url"]
     webhook = WebhookClient(alerts_url)
-    logger.debug('SLACK ALERT: ' + message)
+    LOGGER.debug('SLACK ALERT: ' + message)
     response = webhook.send(text=message)
     notify_slack_monitor(message)
     return
 
 # slack integration - Use this for #monitor-automation (both failures and successes)
 def notify_slack_monitor(message):
-    if not bool(config["enable_slack"]):
+    if not bool(CONFIG["enable_slack"]):
         return
-    monitor_url = config["monitor_url"]
+    monitor_url = CONFIG["monitor_url"]
     webhook = WebhookClient(monitor_url)
-    logger.debug('SLACK MON: ' + message)
+    LOGGER.debug('SLACK MON: ' + message)
     response = webhook.send(text=message)
     return
 
 def possibly_download_broadcast(broadcast):
+    """ Given a dictionary of data representing a broadcast, possibly download the mp3 associated with it.
+
+    See "retrieve_upcoming_broadcast_metadata" function below for example structure of these broadcast dicts
+
+    Reasons we wouldn't download:
+
+    - There is no media metadata associated with it
+    - The file already exists and it's the same file we expect
+    - There is otherwise some failure in the downloading mechanism
+
+    Once we download the broadcast, we:
+
+    - Overwrite the existing mp3 tag based on the show information in the broadcast
+    """
 
     # Config params
-    destination_folder = config["destination_folder"]
+    destination_folder = CONFIG["destination_folder"]
 
     show_title = broadcast['Show']['title']
     start_time = broadcast['start']
@@ -88,22 +108,22 @@ def possibly_download_broadcast(broadcast):
     remote_path = ""
 
     show_id = broadcast['show_id']
-    logger.debug("Processing show: " + show_id)
+    LOGGER.debug("Processing show: " + show_id)
 
     title = broadcast['title']
-    logger.debug("Broadcast title: " + title)
+    LOGGER.debug("Broadcast title: " + title)
 
     # Look for attached media
     show_media = broadcast['media']
     for media in show_media:
         subtype = media.get('subtype', 'no key found')
-        logger.debug("Media subtype: " + subtype)
+        LOGGER.debug("Media subtype: " + subtype)
         if subtype == 'mp3':
-            logger.debug("found an mp3: ")
+            LOGGER.debug("found an mp3: ")
             remote_path = media['url']
-            logger.debug("Remote Path: " + remote_path)
+            LOGGER.debug("Remote Path: " + remote_path)
     if not remote_path:
-        logger.debug("Show {} does not have an MP3 attached.".format(show_id))
+        LOGGER.debug("Show {} does not have an MP3 attached.".format(show_id))
         # Report to Slack if starting-soon show doesn't have an MP3. Otherwise, process silently.
         if (showtime <= now_plus_60):
             notify_slack_monitor(build_slack_message("_{}_ at {} does not have an MP3 attached. Expecting live broadcast.".format(show_title, start_time), ":mute:"))
@@ -111,60 +131,60 @@ def possibly_download_broadcast(broadcast):
 
     # Get show info for MP3 tags:
     show_info = broadcast['Show']
-    logger.debug(show_info)
+    LOGGER.debug(show_info)
 
     album = show_info['title']
-    logger.debug("Show Name (album): " + album)
+    LOGGER.debug("Show Name (album): " + album)
 
     short_name = show_info['short_name']
-    logger.debug("Short Name (local folder): " + short_name)
+    LOGGER.debug("Short Name (local folder): " + short_name)
 
     # iterate through hosts
-    logger.debug("trying to get hosts")
+    LOGGER.debug("trying to get hosts")
     hosts = show_info['hosts']
     host_list = []
     for host in hosts:
-        logger.debug("Found a host")
+        LOGGER.debug("Found a host")
         host_list.append(host['display_name'])
 
     if len(host_list) == 0:
-        logger.debug("No host data in API response, use show name as artist tag placeholder")
+        LOGGER.debug("No host data in API response, use show name as artist tag placeholder")
         artist = album
     elif len(host_list) > 1:
-        logger.debug("making a list of hosts for Artist field")
+        LOGGER.debug("making a list of hosts for Artist field")
         artist = ','.join(host_list)
     else:
-        logger.debug("Only one host")
+        LOGGER.debug("Only one host")
         artist = host_list[0]
 
-    logger.debug("Hosts (artist): " + artist)
+    LOGGER.debug("Hosts (artist): " + artist)
 
     # construct filename
     metadata_filename = os.path.join(destination_folder, short_name, short_name + ".json")
     local_filename = os.path.join(destination_folder, short_name, short_name + "-newest.mp3")
     local_directory = os.path.dirname(local_filename)
 
-    logger.debug('Local Filename: ' + local_filename)
-    logger.debug('Local metadata filename: ' + metadata_filename)
+    LOGGER.debug('Local Filename: ' + local_filename)
+    LOGGER.debug('Local metadata filename: ' + metadata_filename)
 
     # create directories, if needed
     if not os.path.exists(local_directory):
-        logger.warning('Had to make directory ' + local_directory)
+        LOGGER.warning('Had to make directory ' + local_directory)
         notify_slack_alerts(build_slack_message("New show warning, no local directory existed.", ":warning:", "Created `{}`. You should verify that this was expected.".format(local_directory)))
         os.makedirs(local_directory)
 
     # If we already have an MP3 for this show, check if it matches the new data
     if os.path.exists(local_filename) and os.path.exists(metadata_filename):
 
-        logger.debug("Local MP3 for show exists. Opening sidecar metadata to compare source.")
+        LOGGER.debug("Local MP3 for show exists. Opening sidecar metadata to compare source.")
         with open(metadata_filename, 'r') as metadata_file:
             source_metadata = json.load(metadata_file)
 
         # Uploaded objects are trusted to be immutable due to CDN caching, so we only need to compare the file name
         previous_path = source_metadata['url']
         if previous_path == remote_path:
-            logger.debug("Local file source matches remote URL. No download required. {}".format(remote_path))
-            logger.debug("Previously downloaded at: {}".format(source_metadata['download_time']))
+            LOGGER.debug("Local file source matches remote URL. No download required. {}".format(remote_path))
+            LOGGER.debug("Previously downloaded at: {}".format(source_metadata['download_time']))
             notify_slack_monitor(build_slack_message(
                 "_{}_ already downloaded and cued for {}".format(show_title, start_time),
                 ":white_check_mark:",
@@ -172,7 +192,7 @@ def possibly_download_broadcast(broadcast):
             ))
             return
         else:
-            logger.debug("Local file source name ({}) different from remote ({}); file has changed: Download new file.".format(previous_path, remote_path))
+            LOGGER.debug("Local file source name ({}) different from remote ({}); file has changed: Download new file.".format(previous_path, remote_path))
 
     # If the existing file doesn't match the remote file
     notify_slack_monitor(build_slack_message(
@@ -182,9 +202,9 @@ def possibly_download_broadcast(broadcast):
     ))
 
     # Download file
-    logger.info("Downloading " + remote_path + " to " + local_filename)
+    LOGGER.info("Downloading " + remote_path + " to " + local_filename)
     # todo/possible bug: forcing int conversion, need to handle exceptions
-    retry_count = int(config["retry_count"])
+    retry_count = int(CONFIG["retry_count"])
     for i in range(retry_count):
         try:
             with urllib.request.urlopen(remote_path) as response, open(local_filename, 'wb') as out_file:
@@ -196,7 +216,7 @@ def possibly_download_broadcast(broadcast):
             if (int(actual_bytes) != int(expected_bytes)):
                 message = "Download size did not match: {} bytes saved, expected {} bytes".format(actual_bytes, expected_bytes)
 
-                logger.debug(message)
+                LOGGER.debug(message)
                 notify_slack_monitor(build_slack_message(message, ":abacus:"))
                 raise RuntimeError(message)
 
@@ -207,18 +227,18 @@ def possibly_download_broadcast(broadcast):
                     "download_time": datetime.datetime.now().astimezone().replace(microsecond=0).isoformat(),
                     "filesize": expected_bytes
                 }, metadata_file)
-            logger.debug("Wrote metadata sidecar: {}".format(metadata_filename))
+            LOGGER.debug("Wrote metadata sidecar: {}".format(metadata_filename))
 
         except Exception as e:
             if i < retry_count - 1: # i is zero indexed
-                logger.debug("Download attempt {} failed. {}".format(i + 1, e))
+                LOGGER.debug("Download attempt {} failed. {}".format(i + 1, e))
                 notify_slack_monitor(build_slack_message(
                     "Download attempt failed, {}/{}".format(i, retry_count),
                     ":warning:",
                     e))
                 continue
             else:
-                logger.debug("Download completely failed. {}".format(i, e))
+                LOGGER.debug("Download completely failed. {}".format(i, e))
                 notify_slack_alerts(build_slack_message(
                     "Downloading `{}` failed: `{}`. ".format(remote_path, e),
                     ":bangbang:",
@@ -228,36 +248,19 @@ def possibly_download_broadcast(broadcast):
         break
 
     if os.path.exists(local_filename):
-        logger.info("download complete.")
+        LOGGER.info("download complete.")
         notify_slack_monitor(build_slack_message(
             "Download successful. _{}_ cued for {}".format(show_title, start_time),
             ":white_check_mark:",
             "Automation will broadcast `{}`".format(local_filename)
         ))
 
-        # set mp3 tags
-        logger.debug("Adding mp3 tag")
-        try:
-            tags = ID3(local_filename)
-        except ID3NoHeaderError:
-            logger.debug("Adding ID3 header")
-            tags = ID3()
+        # TODO -- Add logic here to pad file if it's a length that would cause problems
 
-        logger.debug("Removing tags")
-        tags.delete(local_filename)
+        set_mp3_tag(local_filename, artist, album, title)
 
-        logger.debug("Constructing tag")
-        tags["TIT2"] = TIT2(encoding=3, text=title) # title
-        tags["TALB"] = TALB(encoding=3, text=album) # album
-        tags["TPE1"] = TPE1(encoding=3, text=artist) # artist
-
-        logger.debug("Saving tags")
-        # v1=2 switch forces ID3 v1 tag to be written
-        tags.save(filename=local_filename,
-                  v1=ID3v1SaveOptions.CREATE,
-                  v2_version=4)
     else:
-        logger.info("download completed, but local file not available: {}".format(local_filename))
+        LOGGER.info("download completed, but local file not available: {}".format(local_filename))
         notify_slack_alerts(build_slack_message(
             "Local file `{}` is not available after download.".format(local_filename),
             ":bangbang:",
@@ -265,77 +268,175 @@ def possibly_download_broadcast(broadcast):
         ))
     return
 
+def set_mp3_tag(local_filename, artist, album, title):
+    # set mp3 tags
+    LOGGER.debug("Adding mp3 tag")
+    try:
+        tags = ID3(local_filename)
+    except ID3NoHeaderError:
+        LOGGER.debug("Adding ID3 header")
+        tags = ID3()
+
+    LOGGER.debug("Removing tags")
+    tags.delete(local_filename)
+
+    LOGGER.debug("Constructing tag")
+    tags["TIT2"] = TIT2(encoding=3, text=title) # title
+    tags["TALB"] = TALB(encoding=3, text=album) # album
+    tags["TPE1"] = TPE1(encoding=3, text=artist) # artist
+
+    LOGGER.debug("Saving tags")
+    # v1=2 switch forces ID3 v1 tag to be written
+    tags.save(
+        filename=local_filename,
+        v1=ID3v1SaveOptions.CREATE,
+        v2_version=4
+    )
+
 # main function
 def fetch_upcoming():
-    logger.name = 'bff.download_files'
-    logger.info("Starting process")
+    LOGGER.name = 'bff.download_files'
+    LOGGER.info("Starting process")
 
     notify_slack_monitor(build_slack_message("Automation checking for new recorded shows...", ":eyes:"))
 
-    # Config params
-    station_url = config["station_url"]
-    key = config["key"]
+    station_url = CONFIG["station_url"]
+    key = CONFIG["key"]
+
+    broadcast_metadata = retrieve_upcoming_broadcast_metadata(station_url, key)
+
+    if broadcast_metadata:
+        LOGGER.debug("{} upcoming broadcasts returned by Creek API".format(len(broadcast_metadata)))
+        # Process every upcoming broadcast and cue the download file if new:
+        for broadcast in broadcast_metadata:
+            possibly_download_broadcast(broadcast)
+    else:
+        LOGGER.debug("No upcoming broadcast returned by Creek")
+        notify_slack_monitor(build_slack_message("There is no upcoming broadcast published in Creek", ":shrug:"))
+
+    LOGGER.info("Finished process")
+    LOGGER.name = __name__
+
+def retrieve_upcoming_broadcast_metadata(station_url, key):
+    """ Retrieves a json response from creek that we parse into a list of dictionaries.
+
+    Example format of this is like below -- note some have attached media, and some don't.
+
+    [
+        {
+            "id": "48469",
+            "title": "Heartbeats 8/4",
+            "start": "2025-08-04 16:00:00",
+            "text": "",
+            "show_id": "612",
+            "url": "http://bff.fm/broadcasts/48469",
+            "Show": {
+                "id": "612",
+                "title": "Heartbeats FM",
+                "short_name": "heartbeats-fm",
+                "short_description": "HEARTBEATS is a series of live shows in the Bay Area that spotlights artists and focuses on immersive and rousing electronic dance music. \r\nReach out if you'd like to spin at one of our events. If not then enjoy the tunes.\r\n",
+                "full_description": "(Future Funk, City Pop, Nu-Disco, Bay House, Retro Internationale.) HEARTBEATS is a series of live shows in the Bay Area that spotlights artists and focuses on immersive and rousing dance music. This channel will serve as a bulletin board for those events as well as a mood board for your Monday groove. I want to expose YOU, the listener, to a new kind of slapper. Reach out if you'd like to spin at one of our events.&nbsp;If not then enjoy the tunes.",
+                "url": "http://bff.fm/shows/heartbeats-fm",
+                "Image": null,
+                "image": false,
+                "airtime_rule": null,
+                "hosts": [],
+                "airtimes": [],
+                "categories": [],
+                "group": null,
+                "meta": []
+            },
+            "media": [
+                {
+                    "id": "146898",
+                    "title": "bff_Aug4.mp3",
+                    "description": "",
+                    "type": "audio",
+                    "subtype": "mp3",
+                    "file": "heartbeats-fm/1754321122YDBQjwjv-bff_Aug4.mp3",
+                    "url": "https://a.bff.fm/audio/heartbeats-fm/1754321122YDBQjwjv-bff_Aug4.mp3",
+                    "meta": []
+                }
+            ],
+            "User": null,
+            "Image": null,
+            "tracks": []
+        },
+        {
+            "id": "48422",
+            "title": "PICKLEPLANET #156 ERIC PT 3",
+            "start": "2025-08-04 18:00:00",
+            "text": "HES BACK BABY THE BIRTHDAY KING BRINGING THE BANGERS",
+            "show_id": "507",
+            "url": "http://bff.fm/broadcasts/48422",
+            "Show": {
+                "id": "507",
+                "title": "PICKLEPLANET",
+                "short_name": "pickleplanet",
+                "short_description": "pickle licious tracks sprinkled with new stuff, local stuff and all the things that make up my chaos brainz ",
+                "full_description": "pickle licious tracks sprinkled with new stuff, local stuff and all the things that make up my chaos brainz.",
+                "url": "http://bff.fm/shows/pickleplanet",
+                "Image": null,
+                "image": false,
+                "airtime_rule": null,
+                "hosts": [],
+                "airtimes": [],
+                "categories": [],
+                "group": null,
+                "meta": []
+            },
+            "media": [],
+            "User": null,
+            "Image": null,
+            "tracks": []
+        }
+    ]
+    """
 
     # download json
     upcoming_url = "api/broadcasts/upcoming?key="
     full_upcoming_url = station_url + upcoming_url + key
-    logger.debug("Upcoming broadcast URL: " + full_upcoming_url)
+    LOGGER.debug("Upcoming broadcast URL: " + full_upcoming_url)
 
     # Get next broadcast from Creek:
     try:
         response = urllib.request.urlopen(full_upcoming_url)
     except Exception as e:
-        logger.debug("Error: Failed to read from Creek upcoming broadcasts API.")
+        LOGGER.debug("Error: Failed to read from Creek upcoming broadcasts API.")
         notify_slack_alerts(build_slack_message("Automation could not connect to Creek upcoming broadcast API `{}`".format(upcoming_url), ":bangbang:", e))
-        return
+        return None
 
     # Attempt to parse as JSON - do this in separate steps for clearer debugging
     try:
         str_response = response.read().decode('utf-8')
         broadcasts = json.loads(str_response)
     except Exception as e:
-        logger.debug("Error: Creek upcoming broadcasts API response could not be parsed.")
+        LOGGER.debug("Error: Creek upcoming broadcasts API response could not be parsed.")
         notify_slack_alerts(":bangbang: Automation failed to parse Creek upcoming broadcast response `{}{}`\n\n> `{}`".format(station_url, upcoming_url, e))
-        return
+        return None
 
-    #logger.debug("string response: " + str_response)
-    #logger.debug("json response: ")
-    #logger.debug(broadcasts)
+    #LOGGER.debug("string response: " + str_response)
+    #LOGGER.debug("json response: ")
+    #LOGGER.debug(broadcasts)
 
-    if not broadcasts:
-        logger.debug("No upcoming broadcast returned by Creek")
-        notify_slack_monitor(build_slack_message("There is no upcoming broadcast published in Creek", ":shrug:"))
-        return
-    else:
-        logger.debug("{} upcoming broadcasts returned by Creek API".format(len(broadcasts)))
-
-    # Process every upcoming broadcast and cue the download file if new:
-    for broadcast in broadcasts:
-        possibly_download_broadcast(broadcast)
-
-    logger.info("Finished process")
-    logger.name = __name__
+    return broadcasts
 
 
-if __name__ == '__main__':
-    # MAIN PROCESS
-
-    with open('pysync-config.yml', 'r') as f:
-        config = yaml.load(f)
-
+def configure_logs(logger, config):
     # prep logging system
     log_path = config["log_path"]
     log_file_name = config["log_name"]
     log_level = config["log_level"]
 
     log_format = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
-    logger = logging.getLogger()
     logger.setLevel(log_level)
 
     # log to file
-    log_file_handler = RotatingFileHandler(filename="{0}/{1}.log".format(log_path, log_file_name),
-                                           maxBytes=10 * 1024 * 1024,  # 10 MB
-                                           backupCount=20)
+    log_file_handler = RotatingFileHandler(
+        filename="{0}/{1}.log".format(log_path, log_file_name),
+        maxBytes=10 * 1024 * 1024,  # 10 MB
+        backupCount=20
+    )
     log_file_handler.setFormatter(log_format)
     logger.addHandler(log_file_handler)
 
@@ -344,11 +445,22 @@ if __name__ == '__main__':
     log_console_handler.setFormatter(log_format)
     logger.addHandler(log_console_handler)
 
-    logger.info("Program Start")
+
+if __name__ == '__main__':
+    # MAIN PROCESS
+
+    with open('pysync-config.yml', 'r') as f:
+        CONFIG = yaml.load(f, Loader=yaml.SafeLoader)
+        if not CONFIG:
+            raise Exception("No configuration found")
+
+    configure_logs(LOGGER, CONFIG)
+
+    LOGGER.info("Program Start")
 
     if(len(sys.argv) > 1):
         if(sys.argv[1] == "now"):
-            logger.info("now switch passed, running once and exiting.")
+            LOGGER.info("now switch passed, running once and exiting.")
             fetch_upcoming()
             sys.exit(0)
 
@@ -358,7 +470,7 @@ if __name__ == '__main__':
     scheduler.add_job(fetch_upcoming, 'cron', minute='20,50')
     scheduler.start()
 
-    logger.info('Press Ctrl+{0} to exit'.format('Break' if os.name == 'nt' else 'C'))
+    LOGGER.info('Press Ctrl+{0} to exit'.format('Break' if os.name == 'nt' else 'C'))
 
     try:
         # This is here to simulate application activity (which keeps the main thread alive).
@@ -367,4 +479,4 @@ if __name__ == '__main__':
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()  # Not strictly necessary if daemonic mode is enabled but should be done if possible
 
-    logger.info("Program Stop")
+    LOGGER.info("Program Stop")
