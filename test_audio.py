@@ -60,13 +60,13 @@ def test_extend_file_with_inspectable_output():
 
 def test_boundary_helper():
 
-    assert audio.length_is_close_to_thirty_minute_boundary(27, close_mins=2) is False
-    assert audio.length_is_close_to_thirty_minute_boundary(28, close_mins=2) is True
-    assert audio.length_is_close_to_thirty_minute_boundary(29, close_mins=2) is True
-    assert audio.length_is_close_to_thirty_minute_boundary(30) is True
-    assert audio.length_is_close_to_thirty_minute_boundary(31, close_mins=2) is True
-    assert audio.length_is_close_to_thirty_minute_boundary(32, close_mins=2) is True
-    assert audio.length_is_close_to_thirty_minute_boundary(33, close_mins=2) is False
+    assert audio.length_is_close_to_thirty_minute_boundary(27.5, close_mins=2) is False
+    assert audio.length_is_close_to_thirty_minute_boundary(28.0, close_mins=2) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(29.0, close_mins=2) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(30.0) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(31.0, close_mins=2) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(32.0, close_mins=2) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(32.1, close_mins=2) is False
 
     assert audio.length_is_close_to_thirty_minute_boundary(57, close_mins=2) is False
     assert audio.length_is_close_to_thirty_minute_boundary(59, close_mins=2) is True

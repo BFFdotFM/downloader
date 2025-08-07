@@ -34,6 +34,8 @@ from mutagen.id3 import ID3, TIT2, TALB, TPE1
 
 from slack_sdk.webhook import WebhookClient
 
+import audio
+
 # TODO: configuration file
 # TODO: email on directory creation (new show - won't play)
 # TODO: daemonize
@@ -258,6 +260,7 @@ def possibly_download_broadcast(broadcast):
         # TODO -- Add logic here to pad file if it's a length that would cause problems
 
         set_mp3_tag(local_filename, artist, album, title)
+        inspect_track_length(local_filename)
 
     else:
         LOGGER.info("download completed, but local file not available: {}".format(local_filename))
@@ -292,6 +295,14 @@ def set_mp3_tag(local_filename, artist, album, title):
         v1=ID3v1SaveOptions.CREATE,
         v2_version=4
     )
+
+def inspect_track_length(local_filename):
+    track_length = audio.get_audio_duration_minutes_from_file(local_filename)
+    LOGGER.info(f"Track is {track_length} minutes long")
+    if audio.length_is_close_to_thirty_minute_boundary(track_length):
+        LOGGER.info(f"Track is close to the 30 minute boundary zone!")
+
+
 
 # main function
 def fetch_upcoming():
