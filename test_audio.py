@@ -56,3 +56,26 @@ def test_extend_file_with_inspectable_output():
             # A human should be able to listen to this track and see the higher tone
             # lasts three minutes
             combined_tracks.export(INSPECTABLE_PATH, format="mp3")
+
+
+def test_boundary_helper():
+
+    assert audio.length_is_close_to_thirty_minute_boundary(27, close_mins=2) is False
+    assert audio.length_is_close_to_thirty_minute_boundary(28, close_mins=2) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(29, close_mins=2) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(30) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(31, close_mins=2) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(32, close_mins=2) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(33, close_mins=2) is False
+
+    assert audio.length_is_close_to_thirty_minute_boundary(57, close_mins=2) is False
+    assert audio.length_is_close_to_thirty_minute_boundary(59, close_mins=2) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(60) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(61, close_mins=2) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(63, close_mins=2) is False
+
+    assert audio.length_is_close_to_thirty_minute_boundary(117, close_mins=2) is False
+    assert audio.length_is_close_to_thirty_minute_boundary(119, close_mins=2) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(120) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(122, close_mins=2) is True
+    assert audio.length_is_close_to_thirty_minute_boundary(123, close_mins=2) is False
