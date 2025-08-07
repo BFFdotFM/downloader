@@ -16,7 +16,7 @@ You need to set up your automation to load the correct file. Best results in Rad
 You'll need to go into Creek for your station and download the API key.
 
 1. Log in as a station admin, then:
-2. Tools > Settings > Integration > Scroll down to bottom > Secret Key
+2. Administration > Creek Settings > Integrations | Creek API > API Key
 
 Edit the `pysync-config.yml` configuration file to reflect this key.
 
