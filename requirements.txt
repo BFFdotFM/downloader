@@ -1,5 +1,12 @@
 APScheduler==3.11.0
 mutagen==1.47.0
+pydub==0.25.1
 PyYAML==6.0.2
 slack_sdk==3.36.0
 tzlocal==5.3.1
+# Pytest
+iniconfig==2.1.0
+packaging==25.0
+pluggy==1.6.0
+Pygments==2.19.2
+pytest==8.4.1
